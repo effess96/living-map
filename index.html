@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Basha HQ · Living Agents Map v3.0</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- TOP BAR -->
+  <header class="topbar glass">
+    <div class="brand">
+      <div class="brand-mark">B</div>
+      <div>
+        <div class="brand-title">Basha HQ</div>
+        <div class="brand-sub">Living Agents Map · v3.0</div>
+        <div class="live-badge" id="liveBadge">checking live data…</div>
+      </div>
+    </div>
+
+    <div class="clock">
+      <div class="sky" id="sky" aria-hidden="true">
+        <span class="sky-night"></span>
+        <span class="sky-orb" id="skyOrb"></span>
+      </div>
+      <div class="clock-text">
+        <div class="clock-time mono" id="clockTime">--:--</div>
+        <div class="clock-sub" id="clockSub">Amman · UTC+3</div>
+      </div>
+    </div>
+
+    <div class="speed" role="group" aria-label="Simulation speed">
+      <button class="btn icon" id="btnPause" aria-label="Pause">
+        <svg viewBox="0 0 24 24" width="14" height="14"><path id="pauseIcon" d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor"/></svg>
+      </button>
+      <div class="seg">
+        <button data-speed="live" title="Real Amman time">Live</button>
+        <button data-speed="1" class="active" title="1 simulated minute per second">1×</button>
+        <button data-speed="5" title="5 simulated minutes per second">5×</button>
+        <button data-speed="20" title="20 simulated minutes per second">20×</button>
+      </div>
+      <button class="btn ghost" id="btnNow" title="Jump to real Amman time">Now</button>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="layout">
+    <section class="col-main">
+      <div class="card glass map-card">
+        <div class="card-head">
+          <div>
+            <h2>The House</h2>
+            <p class="muted" id="mapMeta">Phase 1 · simulated house + garden · 10 agents</p>
+          </div>
+          <div class="seg small" aria-label="Thought bubbles">
+            <button data-bubbles="all" class="active">All thoughts</button>
+            <button data-bubbles="focus">Focus</button>
+          </div>
+        </div>
+        <div class="map-scroll">
+          <div class="map" id="map">
+            <canvas id="scene"></canvas>
+            <div class="labels" id="rooms"></div>
+            <div class="agents-layer" id="agentsLayer"></div>
+          </div>
+        </div>
+        <p class="swipe-hint">Swipe the map sideways to see the whole house · tap an agent</p>
+      </div>
+
+      <div class="roster" id="roster"></div>
+    </section>
+
+    <aside class="col-side">
+      <div class="card glass portfolio" id="portfolio">
+        <div class="card-head">
+          <div>
+            <h2>Paper portfolio</h2>
+            <p class="muted">Managed by Portfolio Advisor</p>
+          </div>
+          <span class="badge-paper">PAPER · SIM</span>
+        </div>
+        <div class="pf-value mono" id="pfValue">$10,000.00</div>
+        <div class="pf-pnl mono" id="pfPnl">+$0.00 (0.00%)</div>
+        <svg class="spark" id="pfSpark" viewBox="0 0 300 60" preserveAspectRatio="none"></svg>
+        <div class="alloc" id="pfAlloc"></div>
+        <div class="alloc-legend" id="pfLegend"></div>
+        <div class="pf-positions" id="pfPositions"></div>
+        <div class="pf-last" id="pfLast"></div>
+        <div class="pf-rules">
+          <svg viewBox="0 0 24 24" width="13" height="13"><path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z" fill="currentColor"/></svg>
+          <span id="pfRules">Rules locked</span>
+        </div>
+      </div>
+
+      <div class="card glass feed-card">
+        <div class="card-head">
+          <div>
+            <h2>Memory stream</h2>
+            <p class="muted">Newest first</p>
+          </div>
+          <span class="live-pill"><i></i>LIVE</span>
+        </div>
+        <div class="feed-filters" id="feedFilters"></div>
+        <ol class="feed" id="feed"></ol>
+      </div>
+    </aside>
+  </main>
+
+  <!-- PROJECTS STRIP -->
+  <section class="card glass projects">
+    <div class="card-head">
+      <div>
+        <h2>Projects</h2>
+        <p class="muted" id="projMeta"></p>
+      </div>
+    </div>
+    <div class="proj-strip" id="projects"></div>
+  </section>
+
+  <footer class="foot">
+    <p>Guardrails: paper money only · agents propose, Basha approves · no agent edits its own rules · every action is logged. Prices are simulated, not market data.</p>
+    <button class="btn ghost" id="btnReset">Reset world</button>
+  </footer>
+</div>
+
+<!-- AGENT PANEL -->
+<div class="scrim" id="scrim"></div>
+<aside class="panel" id="panel" aria-hidden="true">
+  <button class="panel-close" id="panelClose" aria-label="Close">×</button>
+  <div class="panel-body" id="panelBody"></div>
+</aside>
+
+<script src="script.js"></script>
+</body>
+</html>
