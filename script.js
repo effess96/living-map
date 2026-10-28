@@ -551,6 +551,7 @@ async function loadLive() {
     });
   } catch (e) { live.on = false; }
   renderLiveBadge();
+  if (typeof renderToday === 'function') { renderToday(); renderKpis(); }
 }
 function renderLiveBadge() {
   const el = $('liveBadge'); if (!el) return;
@@ -1341,7 +1342,14 @@ function renderPanel() {
     const end = a.schedule[i + 1] ? a.schedule[i + 1][0] : 24;
     return `<li class="${i === cur ? 'now' : i < cur ? 'past' : ''}"><span class="mono">${pad(s[0])}:00</span><span>${esc(s[2])} <small>· ${esc(ROOMS[s[1]].name)} · until ${pad(end % 24)}:00</small></span></li>`;
   }).join('');
-  const mems = a.memories.slice(0, 5).map(m => `<li><div class="m-top"><span class="mono">${hhmm(m.t)}</span><span class="tag ${m.type}">${m.type}</span><span>importance ${m.imp}</span></div>${esc(m.text)}</li>`).join('') || '<li>No memories yet.</li>';
+  const mf = world.ui.memFilter || 'all', memList = a.memories.filter(m => mf === 'all' || m.type === mf);
+  const counts = a.memories.reduce((c, m) => (c[m.type] = (c[m.type] || 0) + 1, c), {});
+  const liveN = a.memories.filter(m => m.live).length;
+  const stats = `<div class="p-stats"><div><b class="mono">${a.memories.length}</b><span>memories</span></div><div><b class="mono">${liveN}</b><span>live from Notion</span></div><div><b class="mono">${a.reflections.length}</b><span>reflections</span></div><div><b class="mono">${Math.round(a.imp)}/${REFLECT_THRESHOLD}</b><span>to next reflection</span></div></div>
+    <div class="p-meter" style="--c:${a.color}"><i style="width:${Math.min(100, a.imp / REFLECT_THRESHOLD * 100)}%"></i></div>`;
+  const tabs = ['all', 'act', 'plan', 'observe', 'reflect'].map(t => `<button data-mf="${t}" class="${mf === t ? 'active' : ''}">${t}${t === 'all' ? '' : ' ' + (counts[t] || 0)}</button>`).join('');
+  const refl = a.reflections.slice(1, 6).map(x => `<li><span class="mono">${hhmm(x.t)}</span>${esc(x.text)}</li>`).join('');
+  const mems = memList.slice(0, 20).map(m => `<li><div class="m-top"><span class="mono">${hhmm(m.t)}</span><span class="tag ${m.type}">${m.type}</span><span>importance ${m.imp}</span></div>${esc(m.text)}</li>`).join('') || '<li>No memories yet.</li>';
   const r = a.reflections[0];
   $('panelBody').innerHTML = `
     <div class="p-head" style="--c:${a.color};--glow:${a.color}88">
@@ -1351,11 +1359,14 @@ function renderPanel() {
     </div>
     <p class="p-role">${esc(a.role)}</p>
     <div class="p-now" style="--c:${a.color}"><label>Now ${a.live ? '· LIVE' : '· simulated'}</label>${esc(a.thought)}</div>
+    ${stats}
     <h4>Today's plan</h4><ol class="plan" style="--c:${a.color}">${plan}</ol>
-    <h4>Last 5 memories</h4><ul class="mems">${mems}</ul>
+    <h4>Memory stream</h4><div class="seg small p-tabs">${tabs}</div><ul class="mems">${mems}</ul>
     <h4>Latest reflection</h4>
     ${r ? `<blockquote class="reflection">${esc(r.text)}<time class="mono">${hhmm(r.t)} · next one after ${REFLECT_THRESHOLD - a.imp} more importance points</time></blockquote>` : '<p class="muted">No reflection yet.</p>'}
+    ${refl ? `<h4>Earlier reflections</h4><ul class="refl-list">${refl}</ul>` : ''}
     <div class="p-guard">Guardrail: this agent proposes — Basha approves anything with real-world effect.${a.id === 'pa' || a.id === 'pr' ? ' Paper money only.' : ''}</div>`;
+  $('panelBody').querySelectorAll('[data-mf]').forEach(b => b.onclick = () => { world.ui.memFilter = b.dataset.mf; renderPanel(); });
 }
 
 /* ---------- 19. CONTROLS ---------- */
@@ -1458,6 +1469,161 @@ function resize() {
   applyCam(); updateMapUI();
 }
 
+/* ---------- 22. v4.0 COMMAND CENTER ----------
+   Adds: KPI strip, Today checklist (morning brief), Up-next agenda with countdowns,
+   Trading cockpit (live auto-trader status from Railway), richer agent pages, phone nav.
+   Everything old keeps working; these parts only read data. */
+const PUMP_URL = 'https://pumpradar-production-37fa.up.railway.app';
+const BOT = { snap: null, ok: null, at: 0, tab: 'pos' };
+const TODO_KEY = 'bashaHQ.todo.v4';
+const AGENDA = [   // [label, kind, hour, min, onlyDate(YYYY-MM-DD)|null]
+  ['Night study (Sonnet)', 'agent', 0, 10], ['Night study', 'agent', 2, 10], ['Night study', 'agent', 4, 10],
+  ['Daily shift · mark-to-market + DropRadar scan', 'agent', 5, 35],
+  ['Bot curfew ends · buying allowed', 'bot', 7, 0], ['Bot curfew starts · no new buys', 'bot', 1, 0],
+  ['Evening check-in (push)', 'you', 19, 52],
+  ['Auto-trader dry-run review → go live?', 'you', 18, 45, '2026-10-29'],
+  ['Phase 4 · 30-day review (perps gate)', 'you', 10, 0, '2026-11-27']
+];
+const fmtD = v => v == null || isNaN(v) ? '—' : (v < 0 ? '−$' : '$') + Math.abs(v).toFixed(2);
+const ago = ms => { const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; };
+const inMin = m => m < 60 ? `in ${m} min` : m < 1440 ? `in ${Math.floor(m / 60)} h ${m % 60} m` : `in ${Math.round(m / 1440)} days`;
+
+async function loadBot() {
+  try {
+    const r = await fetch(PUMP_URL + '/pub/trader', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json(); if (!d || !d.mode) throw new Error('bad data');
+    BOT.snap = d; BOT.ok = true; BOT.at = Date.now();
+  } catch (e) { BOT.ok = false; }
+  renderCockpit(); renderKpis();
+  // the bot reads the wallet itself, so it's the most reliable source for the real-money panel
+  if (BOT.ok && BOT.snap.walletUsd != null && BOT.snap.solUsd) {
+    RM.sol = BOT.snap.walletUsd / BOT.snap.solUsd; RM.solUsd = BOT.snap.solUsd; RM.at = Date.now(); RM.err = ''; RM.viaBridge = true; renderPortfolio();
+  }
+}
+function sparkPath(pts, w, h) {
+  if (!pts || pts.length < 2) return '';
+  const vs = pts.map(p => p[1]), lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1;
+  return pts.map((p, i) => `${i ? 'L' : 'M'}${(i / (pts.length - 1) * w).toFixed(1)},${(h - 4 - (p[1] - lo) / span * (h - 8)).toFixed(1)}`).join('');
+}
+function renderCockpit() {
+  const s = BOT.snap, mode = $('ckMode'); if (!mode) return;
+  if (!BOT.ok || !s) {
+    mode.className = 'mode-badge off'; mode.textContent = BOT.ok === null ? '…' : 'OFFLINE';
+    $('ckVal').textContent = '—';
+    $('ckSub').textContent = BOT.ok === null ? 'connecting to the bot…' : 'Bot not reachable (Railway asleep, PR #10 not merged yet, or network blocks it). Retrying every 20 s.';
+    $('ckStats').innerHTML = ''; $('ckPane').innerHTML = ''; $('ckSpark').innerHTML = ''; return;
+  }
+  const label = { live: '● LIVE', dry: 'DRY RUN', off: 'OFF', 'no-key': 'NO KEY', error: 'ERROR' }[s.mode] || s.mode;
+  mode.className = 'mode-badge ' + (s.halted ? 'halt' : s.mode); mode.textContent = s.halted ? 'HALTED' : label;
+  $('ckVal').textContent = fmtD(s.walletUsd);
+  const pnl = s.walletUsd != null ? s.walletUsd - RM.start : null;
+  $('ckSub').innerHTML = `<span class="${pnl > 0 ? 'up' : pnl < 0 ? 'down' : ''}">${pnl == null ? '' : (pnl >= 0 ? '+' : '') + fmtD(pnl) + ' vs $' + RM.start + ' start'}</span>${s.wallet ? ` · <a href="https://solscan.io/account/${esc(s.wallet)}" target="_blank" rel="noopener">${esc(s.wallet.slice(0, 4))}…${esc(s.wallet.slice(-4))}</a>` : ''} · ${ago(BOT.at)}`;
+  const eq = (s.equity || []).slice(), d = sparkPath(eq, 160, 48), up = eq.length > 1 && eq[eq.length - 1][1] >= eq[0][1];
+  $('ckSpark').innerHTML = d ? `<path d="${d} L160,48 L0,48 Z" class="spark-fill ${up ? 'up' : 'down'}"/><path d="${d}" class="spark-line ${up ? 'up' : 'down'}"/>` : '<text x="80" y="28" text-anchor="middle" class="spark-empty">history builds every 10 min</text>';
+  const h = +new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Amman', hour: '2-digit', hour12: false }).format(new Date()) % 24;
+  const cf = s.limits ? s.limits.curfew : [1, 7], curfew = h >= cf[0] && h < cf[1];
+  const stat = (k, v, c = '') => `<div class="ck-stat"><span>${k}</span><b class="mono ${c}">${v}</b></div>`;
+  $('ckStats').innerHTML = stat('Buys today', `${s.buysToday}/${s.maxBuys}`) + stat('Open', `${s.positions.length}/${s.limits ? s.limits.maxOpen : 4}`)
+    + stat('Realized today', fmtD(s.realizedTodayUsd), s.realizedTodayUsd > 0 ? 'up' : s.realizedTodayUsd < 0 ? 'down' : '')
+    + stat('Status', s.halted ? 'Halted' : curfew ? 'Curfew' : 'Hunting', s.halted ? 'down' : curfew ? 'warn' : 'up');
+  const pane = $('ckPane');
+  if (BOT.tab === 'pos') {
+    pane.innerHTML = s.positions.length ? s.positions.map(p => {
+      const x = p.x, pct = x == null ? 50 : Math.max(0, Math.min(100, (x - 0.65) / (2 - 0.65) * 100));
+      return `<div class="ck-pos"><div class="ck-pos-top"><b>${esc(p.sym || '?')}</b>${p.dry ? '<span class="tagdry">dry</span>' : ''}<span class="mono">${fmtD(p.costUsd)}</span><span class="mono ${x > 1 ? 'up' : x < 1 ? 'down' : ''}">${x == null ? '—' : x.toFixed(2) + '×'}</span><span class="mono dim">${p.ageMin}m</span></div>
+        <div class="ck-range" title="stop 0.65× … take profit 2×"><i style="left:${pct}%"></i></div></div>`;
+    }).join('') : `<div class="pf-empty">${s.halted ? 'Halted: ' + esc(s.haltReason || '') : curfew ? 'Curfew 01–07: the bot is not buying now.' : 'No open positions. The bot is waiting for a signal that passes every gate.'}</div>`;
+  } else if (BOT.tab === 'log') {
+    pane.innerHTML = (s.log || []).length ? `<ol class="ck-log">${s.log.slice(0, 25).map(l => `<li><span class="mono">${hhmm(l.ts + 3 * 3600e3)}</span>${esc(l.t)}</li>`).join('')}</ol>` : '<div class="pf-empty">No bot activity yet. Each buy, sell and skip shows here.</div>';
+  } else {
+    const L = s.limits || {};
+    pane.innerHTML = `<ul class="ck-rules">
+      <li><span>Max per trade</span><b>$${L.maxUsd}</b></li><li><span>Max open</span><b>${L.maxOpen}</b></li>
+      <li><span>Take profit</span><b>50% off at ${L.tpX}×</b></li><li><span>Stop loss</span><b>−${Math.round((1 - L.slX) * 100)}%</b></li>
+      <li><span>Max hold</span><b>${L.maxHoldMin} min</b></li><li><span>Hard stop</span><b>wallet ≤ $${L.hardStopUsd}</b></li>
+      <li><span>Curfew</span><b>${pad(cf[0])}:00–${pad(cf[1])}:00 Amman</b></li></ul>
+      <p class="muted">Telegram: /trader /stop /resume /sellall · limits are hard-coded on the server, the map can't change them.</p>`;
+  }
+}
+function bindCockpit() {
+  document.querySelectorAll('[data-ck]').forEach(b => b.addEventListener('click', () => {
+    BOT.tab = b.dataset.ck; document.querySelectorAll('[data-ck]').forEach(x => x.classList.toggle('active', x === b)); renderCockpit();
+  }));
+  loadBot(); setInterval(loadBot, 20000);
+}
+
+/* KPI strip */
+function renderKpis() {
+  const el = $('kpis'); if (!el) return;
+  const s = BOT.snap, working = world.agents.filter(a => agentState(a)[0] === 'working').length;
+  const liveP = (world.projects || []).filter(p => p.status === 'Live').length;
+  const pf = world.portfolio, paper = pf && pf.history && pf.history.length ? pf.history[pf.history.length - 1] : null;
+  const k = (label, val, sub, cls = '') => `<div class="kpi glass ${cls}"><span>${label}</span><b class="mono">${val}</b><small>${sub}</small></div>`;
+  el.innerHTML =
+    k('Auto-trader', !BOT.ok ? 'offline' : s.halted ? 'halted' : ({ dry: 'dry run', live: 'LIVE', off: 'off', 'no-key': 'no key' }[s.mode] || s.mode), BOT.ok ? `${s.buysToday} buys today · ${s.positions.length} open` : 'waiting for Railway', BOT.ok ? (s.halted ? 'bad' : s.mode === 'live' ? 'good' : 'warn') : 'bad')
+    + k('Real wallet', BOT.ok ? fmtD(s.walletUsd) : (RM.sol != null && RM.solUsd ? fmtD(RM.sol * RM.solUsd) : '—'), 'Phase 4 · $20 start · stop $10', '')
+    + k('Paper fund', paper != null ? '$' + Math.round(paper).toLocaleString() : '—', 'simulated $10,000 · agents', '')
+    + k('Agents', `${working}/${world.agents.length}`, 'working right now', 'good')
+    + k('Projects', `${(world.projects || []).length}`, `${liveP} live`, '')
+    + k('Live data', live.on ? 'ON' : 'OFF', live.on && live.updated ? 'Notion · ' + ago(Date.parse(live.updated)) : 'simulating', live.on ? 'good' : 'warn');
+}
+
+/* Today checklist (from the morning brief in Notion) */
+function todoState() { try { return JSON.parse(localStorage.getItem(TODO_KEY) || '{}'); } catch (e) { return {}; } }
+function renderToday() {
+  const el = $('todo'); if (!el) return;
+  const day = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Amman' }), st = todoState();
+  const done = (st.day === day && st.done) || {};
+  const items = live.brief && live.brief.length ? live.brief : ['Live brief not loaded yet: the daily shift writes it to Notion at 05:35.'];
+  el.innerHTML = items.map((t, i) => {
+    const id = t.slice(0, 40);
+    return `<li class="${done[id] ? 'done' : ''}" data-id="${esc(id)}"><button class="tick" aria-label="Mark done">${done[id] ? '✓' : ''}</button><span>${esc(t)}</span></li>`;
+  }).join('');
+  const n = items.filter(t => done[t.slice(0, 40)]).length;
+  $('todayCount').textContent = live.brief && live.brief.length ? `${n}/${items.length}` : '';
+  el.querySelectorAll('li[data-id]').forEach(li => li.querySelector('.tick').onclick = () => {
+    const cur = todoState(), d = cur.day === day ? cur.done || {} : {};
+    d[li.dataset.id] = !d[li.dataset.id];
+    try { localStorage.setItem(TODO_KEY, JSON.stringify({ day, done: d })); } catch (e) {}
+    renderToday();
+  });
+}
+
+/* Up-next agenda with live countdowns */
+function renderAgenda() {
+  const el = $('agenda'); if (!el) return;
+  const now = Date.now(), wall = now + 3 * 3600e3, today = Math.floor(wall / 864e5) * 864e5;
+  const items = [];
+  AGENDA.forEach(([label, kind, h, m, only]) => {
+    if (only) { const t = Date.parse(`${only}T${pad(h)}:${pad(m)}:00+03:00`); if (t > now) items.push({ label, kind, t }); return; }
+    let t = today + (h * 60 + m) * 60000 - 3 * 3600e3; if (t <= now) t += 864e5; items.push({ label, kind, t });
+  });
+  items.sort((a, b) => a.t - b.t);
+  el.innerHTML = items.slice(0, 6).map((it, i) => {
+    const mins = Math.round((it.t - now) / 60000);
+    return `<li class="k-${it.kind}${i === 0 ? ' first' : ''}"><span class="mono when">${hhmm(it.t + 3 * 3600e3)}</span><span class="what">${esc(it.label)}</span><span class="mono in">${inMin(mins)}</span></li>`;
+  }).join('');
+}
+
+/* Phone nav highlights the section in view */
+function bindNav() {
+  const links = [...document.querySelectorAll('#bottomNav a')];
+  links.forEach(a => a.addEventListener('click', e => { const t = document.querySelector(a.getAttribute('href')); if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }));
+  if (!('IntersectionObserver' in window)) return;
+  const io = new IntersectionObserver(es => es.forEach(en => {
+    if (en.isIntersecting) links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + en.target.id));
+  }), { rootMargin: '-40% 0px -55% 0px' });
+  links.forEach(a => { const t = document.querySelector(a.getAttribute('href')); if (t) io.observe(t); });
+}
+
+function initV4() {
+  bindCockpit(); bindNav();
+  renderKpis(); renderToday(); renderAgenda();
+  setInterval(() => { renderKpis(); renderAgenda(); }, 30000);
+  setInterval(renderToday, 60000);
+}
+
 /* ---------- 21. START ---------- */
 function init() {
   const c = world.clock; c.sim = ammanNow();
@@ -1493,6 +1659,7 @@ function init() {
 
   renderClock(); renderRoster(); renderPortfolio(); renderRoomChips();
   loadLive(); setInterval(loadLive, LIVE_REFRESH_MIN * 60000);
+  initV4();
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
 }
 

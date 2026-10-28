@@ -10,8 +10,8 @@
   <meta name="apple-mobile-web-app-title" content="Basha HQ">
   <link rel="apple-touch-icon" href="icon.png">
   <link rel="icon" type="image/png" href="icon.png">
-  <title>Basha HQ · Living Agents Map v3.4</title>
-  <link rel="stylesheet" href="style.css?v=3.4">
+  <title>Basha HQ · Living Agents Map v4.0</title>
+  <link rel="stylesheet" href="style.css?v=4.0">
 </head>
 <body>
 <div class="app" id="app">
@@ -22,7 +22,7 @@
       <div class="brand-mark">B</div>
       <div>
         <div class="brand-title">Basha HQ</div>
-        <div class="brand-sub">Living Agents Map · v3.4</div>
+        <div class="brand-sub">Command Center · v4.0</div>
         <div class="live-badge" id="liveBadge">checking live data…</div>
       </div>
     </div>
@@ -52,10 +52,25 @@
     </div>
   </header>
 
+  <!-- COMMAND DASHBOARD (v4.0) -->
+  <section class="dash" id="dash">
+    <div class="kpis" id="kpis"></div>
+    <div class="dash-grid">
+      <div class="card glass today-card">
+        <div class="card-head"><div><h2>Today</h2><p class="muted" id="todayMeta">Morning brief from Notion · tick as you go</p></div><span class="chip-count mono" id="todayCount"></span></div>
+        <ul class="todo" id="todo"></ul>
+      </div>
+      <div class="card glass next-card">
+        <div class="card-head"><div><h2>Up next</h2><p class="muted">Scheduled agent runs and your reminders</p></div></div>
+        <ul class="agenda" id="agenda"></ul>
+      </div>
+    </div>
+  </section>
+
   <!-- MAIN -->
   <main class="layout">
     <section class="col-main">
-      <div class="card glass map-card">
+      <div class="card glass map-card" id="mapCard">
         <div class="card-head">
           <div>
             <h2>The House</h2>
@@ -87,6 +102,21 @@
     </section>
 
     <aside class="col-side">
+      <div class="card glass cockpit" id="cockpit">
+        <div class="card-head">
+          <div><h2>Trading cockpit</h2><p class="muted" id="ckMeta">Auto-trader on Railway · read-only view</p></div>
+          <span class="mode-badge" id="ckMode">…</span>
+        </div>
+        <div class="ck-top">
+          <div><div class="ck-val mono" id="ckVal">—</div><div class="ck-sub mono" id="ckSub">connecting to the bot…</div></div>
+          <svg class="spark" id="ckSpark" viewBox="0 0 160 48" preserveAspectRatio="none" aria-label="Wallet value history"></svg>
+        </div>
+        <div class="ck-stats" id="ckStats"></div>
+        <div class="ck-tabs seg small" role="tablist">
+          <button data-ck="pos" class="active">Positions</button><button data-ck="log">Activity</button><button data-ck="rules">Rules</button>
+        </div>
+        <div class="ck-pane" id="ckPane"></div>
+      </div>
       <div class="card glass portfolio" id="portfolio">
         <div class="card-head">
           <div>
@@ -113,7 +143,7 @@
         </div>
       </div>
 
-      <div class="card glass feed-card">
+      <div class="card glass feed-card" id="feedCard">
         <div class="card-head">
           <div>
             <h2>Memory stream</h2>
@@ -139,7 +169,7 @@
   </section>
 
   <footer class="foot">
-    <p>Guardrails: paper money only · agents propose, Basha approves · no agent edits its own rules · every action is logged. Prices are simulated, not market data.</p>
+    <p>Guardrails: paper fund stays paper · real money only via the capped Phase 4 auto-trader · agents propose, Basha approves · no agent edits its own rules · every action is logged. Prices are simulated, not market data.</p>
     <button class="btn ghost" id="btnReset">Reset world</button>
   </footer>
 </div>
@@ -151,6 +181,14 @@
   <div class="panel-body" id="panelBody"></div>
 </aside>
 
-<script src="script.js?v=3.4.1"></script>
+<!-- PHONE NAV (v4.0) -->
+<nav class="bottom-nav" id="bottomNav" aria-label="Sections">
+  <a href="#dash" class="active"><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4zm0 7h6v-5H4zm10 0h6v-9h-6zm0-16v5h6V4z" fill="currentColor"/></svg>Today</a>
+  <a href="#mapCard"><svg viewBox="0 0 24 24"><path d="M12 3 3 10v11h6v-6h6v6h6V10z" fill="currentColor"/></svg>House</a>
+  <a href="#cockpit"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8v4h2V3h-8v2h4l-6 6-4-4-8 8z" fill="currentColor"/></svg>Trading</a>
+  <a href="#feedCard"><svg viewBox="0 0 24 24"><path d="M4 5h16v2H4zm0 6h16v2H4zm0 6h10v2H4z" fill="currentColor"/></svg>Feed</a>
+</nav>
+
+<script src="script.js?v=4.0"></script>
 </body>
 </html>
