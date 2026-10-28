@@ -1102,7 +1102,9 @@ function flushFeed() {
    Notion "Real Money Desk" through the live bridge when it is connected. */
 const RM = { start: 20, stop: 10, key: 'bashaHQ.rmWallet', rpcs: ['https://solana-rpc.publicnode.com', 'https://solana.drpc.org', 'https://api.mainnet-beta.solana.com'], rpcIdx: 0,
   addr: '', sol: null, tokens: 0, solUsd: null, at: 0, err: '' };
-try { RM.addr = localStorage.getItem(RM.key) || ''; } catch (e) {}
+// Basha's Phase 4 trading wallet (public address only; read-only balance). A browser-saved address overrides it.
+const RM_DEFAULT = '6YJYRTQRNVGMoTH6z8i7Avf5G3bsQwiAejWga1SpUWDL';
+try { RM.addr = localStorage.getItem(RM.key) || RM_DEFAULT; } catch (e) { RM.addr = RM_DEFAULT; }
 const isSolAddr = s => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
 // Try each free public Solana server in turn and remember the one that answers.
 async function rpc(method, params) {
@@ -1130,7 +1132,7 @@ async function loadRealMoney() {
     RM.tokens = toks && toks.value ? toks.value.filter(a => +((a.account.data.parsed.info.tokenAmount || {}).uiAmount || 0) > 0).length : 0;
     if (px && px.solana) RM.solUsd = px.solana.usd;
     RM.at = Date.now(); RM.err = '';
-  } catch (e) { RM.err = 'Could not reach Solana right now — retrying every minute. If it keeps failing, your network may block it: try on mobile data.'; }
+  } catch (e) { RM.err = 'Solana unreachable (v3.3.2) — retrying every minute. If it keeps failing, your network blocks it: try mobile data.'; }
   renderPortfolio();
 }
 function renderPortfolio() {
