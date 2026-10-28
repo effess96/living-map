@@ -1,5 +1,5 @@
 /* =========================================================
-   Basha HQ v4.1 — app.js
+   Basha HQ v4.2 — app.js
    Rule: only real data. Two live sources:
      1. Notion, through the Cloudflare bridge (decisions, pipeline, brief, activity, paper fund)
      2. The PumpRadar auto-trader on Railway (wallet, bot mode, trades)
@@ -9,7 +9,7 @@
 'use strict';
 
 /* ---------- 1. CONFIG ---------- */
-const VERSION = 'v4.1';
+const VERSION = 'v4.2';
 const BRIDGE = 'https://hq-live-7k2.faisalbasemsalah.workers.dev';
 const BOT = 'https://pumpradar-production-37fa.up.railway.app/pub/trader';
 const PHASE4 = { start: 20, stop: 10 };
@@ -124,7 +124,7 @@ function renderSources() {
     return `<span class="src ${cls}" title="Tap to refresh" role="button"><i></i>${esc(name)} · ${txt}</span>`;
   };
   $('sources').innerHTML = pill('Notion', S.wOk, S.wAt) + pill('Trader bot', S.bOk, S.bAt);
-  $('sources').onclick = () => { if (S.busy) return; S.busy = true; $('sources').style.opacity = .5; Promise.all([loadWorld(), loadBot()]).finally(() => { S.busy = false; $('sources').style.opacity = 1; }); };
+  $('sources').onclick = () => { if (S.busy) return; S.busy = true; $('sources').style.opacity = .5; Promise.all([loadWorld(), loadBot()]).finally(() => { S.busy = false; $('sources').style.opacity = 1; toast('Refreshed ✓ ' + hhmm(Date.now())); }); };
 }
 
 /* ---------- 5. TODAY: needs you ---------- */
@@ -163,7 +163,7 @@ function renderNeeds() {
   el.innerHTML = html;
   $('needCount').textContent = n ? String(n) : '';
   const all = el.querySelector('[data-allmerged]');
-  if (all) all.onclick = () => { const k = 'hq.merged.' + todayAmman(), t = {}; (w.briefSections.branches || []).forEach(b => t[b] = true); store.set(k, t); renderNeeds(); };
+  if (all) all.onclick = () => { const k = 'hq.merged.' + todayAmman(), t = {}; (w.briefSections.branches || []).forEach(b => t[b] = true); store.set(k, t); renderNeeds(); toast('Marked all merged ✓'); };
   el.querySelectorAll('[data-merge]').forEach(b => b.onclick = () => {
     const k = 'hq.merged.' + todayAmman(), t = store.get(k, {}); t[b.dataset.merge] = !t[b.dataset.merge]; store.set(k, t); renderNeeds();
   });
@@ -329,6 +329,11 @@ function renderLog() {
   }).join('') || '<li class="dim">Nothing in this filter.</li>';
 }
 
+/* small confirmation message at the bottom of the screen */
+function toast(msg) {
+  let t = $('toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 1800);
+}
 /* ---------- 10. TABS + FOOTER ---------- */
 function setTab(t) {
   S.tab = t; store.set('hq.tab', t);
