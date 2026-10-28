@@ -1100,13 +1100,23 @@ function flushFeed() {
    Reads the PUBLIC balance of Basha's trading wallet straight from Solana (read-only).
    The address is stored only in this browser, never in the code. Trades come from the
    Notion "Real Money Desk" through the live bridge when it is connected. */
-const RM = { start: 20, stop: 10, key: 'bashaHQ.rmWallet', rpc: 'https://api.mainnet-beta.solana.com',
+const RM = { start: 20, stop: 10, key: 'bashaHQ.rmWallet', rpcs: ['https://solana-rpc.publicnode.com', 'https://solana.drpc.org', 'https://api.mainnet-beta.solana.com'], rpcIdx: 0,
   addr: '', sol: null, tokens: 0, solUsd: null, at: 0, err: '' };
 try { RM.addr = localStorage.getItem(RM.key) || ''; } catch (e) {}
 const isSolAddr = s => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
+// Try each free public Solana server in turn and remember the one that answers.
 async function rpc(method, params) {
-  const r = await fetch(RM.rpc, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
-  const d = await r.json(); if (d.error) throw new Error(d.error.message); return d.result;
+  let lastErr;
+  for (let k = 0; k < RM.rpcs.length; k++) {
+    const i = (RM.rpcIdx + k) % RM.rpcs.length;
+    try {
+      const r = await fetch(RM.rpcs[i], { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json(); if (d.error) throw new Error(d.error.message);
+      RM.rpcIdx = i; return d.result;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
 }
 async function loadRealMoney() {
   if (!RM.addr) return renderPortfolio();
@@ -1120,7 +1130,7 @@ async function loadRealMoney() {
     RM.tokens = toks && toks.value ? toks.value.filter(a => +((a.account.data.parsed.info.tokenAmount || {}).uiAmount || 0) > 0).length : 0;
     if (px && px.solana) RM.solUsd = px.solana.usd;
     RM.at = Date.now(); RM.err = '';
-  } catch (e) { RM.err = 'Could not reach Solana right now — retrying'; }
+  } catch (e) { RM.err = 'Could not reach Solana right now — retrying every minute. If it keeps failing, your network may block it: try on mobile data.'; }
   renderPortfolio();
 }
 function renderPortfolio() {
