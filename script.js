@@ -239,16 +239,16 @@ const ASSETS = [
 
 /* ---------- 5. PROJECTS (from 02-project-registry) ---------- */
 const PROJECTS = [
-  { n: 1,  name: 'House Agents',      status: 'Live',     note: '10 agents · daily shift 05:35', next: 'Read the morning brief' },
-  { n: 2,  name: 'Living Agents Map', status: 'Live',     note: 'NitroIDE · v3.0 live',          next: 'Connect the live bridge' },
-  { n: 3,  name: 'YieldHour',         status: 'Testing',  note: '30-day test · HR approved', next: 'Log weekly results', test: ['2026-10-19', '2026-11-18'] },
+  { n: 1,  name: 'House Agents',      status: 'Live',     note: '10 agents · night study + daily shift 05:35', next: 'Read the morning brief' },
+  { n: 2,  name: 'Living Agents Map', status: 'Live',     note: 'GitHub Pages · v3.2 · mobile zoom', next: 'Connect the live bridge' },
+  { n: 3,  name: 'YieldHour',         status: 'Testing',  note: '30-day test', next: 'Log weekly results', test: ['2026-10-19', '2026-11-18'] },
   { n: 4,  name: 'DropRadar',         status: 'Building', note: 'Airdrop radar · pause proposed', next: 'Decide: pause until 18 Nov' },
   { n: 5,  name: 'PumpRadar',         status: 'Live',     note: 'v4 + paper-only lock', next: 'Resolve the real-money deposit' },
   { n: 6,  name: 'Agentic AI Lab',    status: 'Ongoing',  note: 'Learning path', next: 'Next lesson' },
   { n: 7,  name: 'PumpRadar Bot',     status: 'Live',     note: 'Agent #7 · paper only', next: 'First weekly review Sun 1 Nov' },
-  { n: 8,  name: 'Art Studio',        status: 'Building', note: 'Agent #8 · Redbubble + Gumroad', next: 'First icon pack' },
-  { n: 9,  name: 'Digital Products',  status: 'Building', note: 'Agent #9 · Gumroad', next: 'First product in 14 days' },
-  { n: 10, name: 'Knowledge Keeper',  status: 'Building', note: 'Agent #10 · Obsidian vault', next: 'Starter kit + 5 lessons' }
+  { n: 8,  name: 'Art Studio',        status: 'Building', note: 'Agent #8 · 18 icons in 3 packs', next: 'Pack A to 24 icons' },
+  { n: 9,  name: 'Digital Products',  status: 'Building', note: 'Agent #9 · Gumroad account ready', next: 'DP1 Notion template' },
+  { n: 10, name: 'Knowledge Keeper',  status: 'Building', note: 'Agent #10 · vault private', next: 'Connect vault in Obsidian' }
 ];
 const PRIVATE_PROJECTS = 0;
 const STATUS_COLORS = { Live: '#3DDC84', Building: '#4C8DFF', Testing: '#F5B94A', Paused: '#8C98B5', Restarting: '#FF7A6B', Ongoing: '#2EC4B6' };
