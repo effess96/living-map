@@ -1,5 +1,5 @@
 /* =========================================================
-   Basha HQ · Living Agents Map v3.1 — script.js
+   Basha HQ · Living Agents Map v3.2 — script.js
    Everything the map shows lives in ONE object: `world`.
    The house is painted on a <canvas> (a drawing surface) every frame.
    A 'camera' decides which part of the house you see (whole house, or zoomed into a room).
@@ -1011,10 +1011,15 @@ function renderAgents() {
     let best = null;
     if (b.tag) {
       // tags stay right next to their agent: above, one step left/right, or under the feet; only other tags block them
-      const tagHit = (left, top) => placed.find(p => p.tag && left < p.left + p.w + 2 && left + b.w + 2 > p.left && top < p.top + p.h + 2 && top + b.h + 2 > p.top);
+      const hitWith = (left, top, onlyTags) => placed.find(p => (!onlyTags || p.tag) && left < p.left + p.w + 2 && left + b.w + 2 > p.left && top < p.top + p.h + 2 && top + b.h + 2 > p.top);
       const under = b.sy + 3;
-      for (const [dx, top, below] of [[0, b.top, false], [-(b.w + 2), b.top, false], [b.w + 2, b.top, false], [0, under, true]]) {
-        if (!tagHit(b.left + dx, top) && top >= 1) { best = { dx, top, below }; break; }
+      const spots = [[0, b.top, false], [-(b.w + 2), b.top, false], [b.w + 2, b.top, false], [0, under, true]];
+      // first try to avoid both tags and room names; if that's impossible, only avoid other tags
+      for (const onlyTags of [false, true]) {
+        for (const [dx, top, below] of spots) {
+          if (!hitWith(b.left + dx, top, onlyTags) && top >= 1) { best = { dx, top, below }; break; }
+        }
+        if (best) break;
       }
       if (!best) best = { dx: 0, top: b.top, below: false };
     } else {
