@@ -1,5 +1,5 @@
 /* =========================================================
-   Basha HQ v4.0 — app.js
+   Basha HQ v4.1 — app.js
    Rule: only real data. Two live sources:
      1. Notion, through the Cloudflare bridge (decisions, pipeline, brief, activity, paper fund)
      2. The PumpRadar auto-trader on Railway (wallet, bot mode, trades)
@@ -9,7 +9,7 @@
 'use strict';
 
 /* ---------- 1. CONFIG ---------- */
-const VERSION = 'v4.0';
+const VERSION = 'v4.1';
 const BRIDGE = 'https://hq-live-7k2.faisalbasemsalah.workers.dev';
 const BOT = 'https://pumpradar-production-37fa.up.railway.app/pub/trader';
 const PHASE4 = { start: 20, stop: 10 };
@@ -93,7 +93,7 @@ async function loadBot() {
     const d = await r.json(); if (!d || !d.mode) throw new Error('bad data');
     S.b = d; S.bOk = true; S.bAt = Date.now();
   } catch (e) { S.bOk = false; if (!(S.w && S.w.wallet)) loadSolana(); }
-  renderMoney(); renderSources();
+  safe(renderMoney); safe(renderSources); if (S.wOk !== null) safe(renderNeeds);
 }
 // Last resort when bot AND bridge are down: read the wallet straight from Solana (read-only).
 // Same address as the old map: a wallet saved in the old map on this device wins, else the trader bot wallet.
@@ -121,17 +121,18 @@ function renderSources() {
   const pill = (name, ok, at) => {
     const cls = ok === null ? '' : !ok ? 'bad' : Date.now() - at > 15 * 60000 ? 'stale' : 'ok';
     const txt = ok === null ? 'connecting…' : ok ? ago(at) : 'offline';
-    return `<span class="src ${cls}" title="${esc(name)}"><i></i>${esc(name)} · ${txt}</span>`;
+    return `<span class="src ${cls}" title="Tap to refresh" role="button"><i></i>${esc(name)} · ${txt}</span>`;
   };
   $('sources').innerHTML = pill('Notion', S.wOk, S.wAt) + pill('Trader bot', S.bOk, S.bAt);
+  $('sources').onclick = () => { if (S.busy) return; S.busy = true; $('sources').style.opacity = .5; Promise.all([loadWorld(), loadBot()]).finally(() => { S.busy = false; $('sources').style.opacity = 1; }); };
 }
 
 /* ---------- 5. TODAY: needs you ---------- */
 function renderNeeds() {
   const w = S.w, el = $('needs');
   if (S.wOk === null) { el.innerHTML = '<div class="empty">Loading…</div>'; return; }
-  if (!S.wOk) { el.innerHTML = '<div class="empty"><b>Notion bridge offline.</b> Decisions can\'t load right now. Open Notion → House Agents → HQ Decisions directly.</div>'; $('needCount').textContent = ''; return; }
-  let html = '', n = 0;
+  if (!S.wOk) { el.innerHTML = alertCard() + '<div class="empty"><b>Notion bridge offline.</b> Decisions can\'t load right now. Open Notion → House Agents → HQ Decisions directly.</div>'; $('needCount').textContent = ''; return; }
+  let html = alertCard(), n = html ? 1 : 0;
   if (Array.isArray(w.decisions)) {
     n += w.decisions.length;
     // due within 3 days (or no date) → full card; later ones fold into one-line rows you can open
@@ -150,7 +151,7 @@ function renderNeeds() {
     const ticks = store.get('hq.merged.' + today, {});
     const left = bs.branches.filter(b => !ticks[b]);
     n += left.length ? 1 : 0;
-    html += `<div class="card"><p class="sub-head">Merge today's work${left.length ? '' : ' · all done ✓'}</p><ul class="mini-list">${bs.branches.map(b => {
+    html += `<div class="card"><p class="sub-head" style="display:flex;align-items:center">Merge today's work${left.length ? `<button class="btn" data-allmerged style="margin-left:auto;padding:6px 10px">All merged</button>` : ' · all done ✓'}</p><ul class="mini-list">${bs.branches.map(b => {
       const m = b.match(/effess96\/([\w.-]+)\s*→\s*([\w/.-]+)/), done = !!ticks[b];
       const url = m ? `${GH}${m[1]}/compare/main...${m[2]}` : '';
       return `<li><span class="ic">${done ? '✓' : '⑂'}</span><div style="flex:1;${done ? 'opacity:.5;text-decoration:line-through' : ''}">${m ? `<b>${esc(m[1])}</b> · ${esc(m[2])}` : esc(b)}${url && !done ? `<div><a href="${esc(url)}" target="_blank" rel="noopener">Open on GitHub →</a></div>` : ''}</div><button class="btn" data-merge="${esc(b)}">${done ? 'Undo' : 'Merged'}</button></li>`;
@@ -161,9 +162,20 @@ function renderNeeds() {
   if (waits.length) { n += waits.length; html += `<div class="card"><p class="sub-head">From this morning's brief</p><ul class="mini-list">${waits.map(t => `<li><span class="ic">!</span><span>${linkify(t)}</span></li>`).join('')}</ul></div>`; }
   el.innerHTML = html;
   $('needCount').textContent = n ? String(n) : '';
+  const all = el.querySelector('[data-allmerged]');
+  if (all) all.onclick = () => { const k = 'hq.merged.' + todayAmman(), t = {}; (w.briefSections.branches || []).forEach(b => t[b] = true); store.set(k, t); renderNeeds(); };
   el.querySelectorAll('[data-merge]').forEach(b => b.onclick = () => {
     const k = 'hq.merged.' + todayAmman(), t = store.get(k, {}); t[b.dataset.merge] = !t[b.dataset.merge]; store.set(k, t); renderNeeds();
   });
+}
+// Phase 4 alarms: hard stop, halted bot, or the bot gone LIVE — always first, never hidden
+function alertCard() {
+  const b = S.b; if (!S.bOk || !b) return '';
+  const msgs = [];
+  if (b.walletUsd != null && b.walletUsd <= PHASE4.stop) msgs.push(`Wallet at ${usd(b.walletUsd)}: hard stop reached. No new trades until you review with Basha HQ.`);
+  if (b.halted) msgs.push(`Bot halted${b.haltReason ? ': ' + b.haltReason : ''}. /resume only after a review.`);
+  else if (b.mode === 'live' && (b.positions || []).length) msgs.push(`Bot is LIVE with ${(b.positions || []).length} open position(s). Kill switch: /stop or /sellall in Telegram.`);
+  return msgs.length ? `<article class="card alert"><div class="dec-top"><span class="chip area" style="--c:#ff6b6b">Real money</span><span class="due late">now</span></div>${msgs.map(m => `<div class="dec-title" style="margin:8px 0 0">${esc(m)}</div>`).join('')}</article>` : '';
 }
 function decisionCard(d) {
   const due = dueInfo(d.due), c = AREA_C[d.area] || '#95a0bb';
@@ -189,7 +201,7 @@ function renderMoney() {
   else if (w.wallet && w.wallet.sol != null && w.wallet.solUsd) { val = w.wallet.sol * w.wallet.solUsd; src = 'Solana via bridge'; at = Date.parse(w.wallet.at) || S.wAt; }
   else if (S.sol) { val = S.sol.sol * S.sol.solUsd; src = 'Solana direct'; at = S.sol.at; }
   const pnl = val == null ? null : val - PHASE4.start, stopped = val != null && val <= PHASE4.stop;
-  const pct = val == null ? 50 : Math.max(0, Math.min(100, (val - PHASE4.stop) / (2 * (PHASE4.start - PHASE4.stop)) * 100));
+  const pct = val == null ? 0 : Math.max(0, Math.min(100, (val - PHASE4.stop) / (2 * (PHASE4.start - PHASE4.stop)) * 100));
   const real = `<div class="mtile"><div class="lab">Real wallet · Phase 4<span class="badge ${stopped ? 'halt' : 'real'}">${stopped ? 'STOPPED' : 'REAL'}</span></div>
     <div class="big mono">${usd(val)}</div>
     <div class="delta mono ${pnl == null ? 'dim' : tone(pnl)}">${pnl == null ? 'no wallet reading right now' : `${signed(pnl)} (${(pnl / PHASE4.start * 100).toFixed(1)}%) vs $${PHASE4.start} start`}</div>
@@ -213,7 +225,7 @@ function renderMoney() {
   const p = w.paper;
   const paper = `<div class="mtile"><div class="lab">Paper fund · $10,000<span class="badge paper">PAPER</span></div>
     <div class="big mono">${p && p.value != null ? usd(p.value) : '—'}</div>
-    <div class="delta mono ${p && p.pnl != null ? tone(p.pnl) : 'dim'}">${p && p.pnl != null ? `${signed(p.pnl)}${p.pnlPct ? ` (${esc(p.pnlPct)})` : ''} · cash ${usd(p.cash)}` : (S.wOk && !S.w.v ? 'needs bridge v2' : 'no snapshot yet')}</div>
+    <div class="delta mono ${p && p.pnl != null ? tone(p.pnl) : 'dim'}">${p && p.pnl != null ? `${signed(p.pnl)}${p.pnlPct ? ` (${esc(p.pnlPct)})` : ''} · cash ${usd(p.cash)}` : (S.wOk === false ? 'Notion offline' : S.wOk && !S.w.v ? 'needs bridge v2' : 'no snapshot yet')}</div>
     <div class="meta">${p ? `Snapshot ${esc(p.label)} · Portfolio Advisor, Notion` : 'Updated by the 05:35 daily shift on US trading days.'}</div></div>`;
   $('money').innerHTML = real + bot + paper;
 
@@ -327,7 +339,8 @@ function setTab(t) {
 function renderFoot() {
   $('foot').innerHTML = `<b>Basha HQ ${VERSION}</b> · only live data: Notion (via the bridge) and the trader bot. Agents propose, Basha approves. Paper fund is simulated money; Phase 4 wallet is real.${S.w && !S.w.v ? ' · <b>bridge v1 detected</b>' : ''}`;
 }
-function renderAll() { renderSources(); renderNeeds(); renderMoney(); renderDone(); renderPipeline(); renderDrops(); renderHealth(); renderAgents(); renderLog(); renderFoot(); }
+function safe(fn) { try { fn(); } catch (e) { console.error(fn.name, e); } }   // one broken section never blanks the page
+function renderAll() { [renderSources, renderNeeds, renderMoney, renderDone, renderPipeline, renderDrops, renderHealth, renderAgents, renderLog, renderFoot].forEach(safe); }
 
 /* ---------- 11. START ---------- */
 function init() {
