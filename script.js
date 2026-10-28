@@ -17,7 +17,7 @@ const WALK_SPEED = 110;          // map units per real second
 const STORE_KEY = 'bashaHQ.livingMap.v2';
 // LIVE DATA: your Cloudflare bridge reads Notion at the moment you open the map.
 // Paste your Worker URL between the quotes (looks like https://basha-live.<name>.workers.dev).
-const WORLD_URL = '';
+const WORLD_URL = 'https://hq-live-7k2.faisalbasemsalah.workers.dev';
 const LIVE_REFRESH_MIN = 1;    // refresh live data every minute while the map is open
 
 // Risk rules for the paper portfolio. Object.freeze = no agent can change them.
@@ -240,7 +240,7 @@ const ASSETS = [
 /* ---------- 5. PROJECTS (from 02-project-registry) ---------- */
 const PROJECTS = [
   { n: 1,  name: 'House Agents',      status: 'Live',     note: '10 agents · night study + daily shift 05:35', next: 'Read the morning brief' },
-  { n: 2,  name: 'Living Agents Map', status: 'Live',     note: 'GitHub Pages · v3.2 · mobile zoom', next: 'Connect the live bridge' },
+  { n: 2,  name: 'Living Agents Map', status: 'Live',     note: 'v3.4 · live from Notion', next: 'Check it each morning' },
   { n: 3,  name: 'YieldHour',         status: 'Testing',  note: '30-day test', next: 'Log weekly results', test: ['2026-10-19', '2026-11-18'] },
   { n: 4,  name: 'DropRadar',         status: 'Building', note: 'Expanding: Jordan free stuff + drops', next: 'Write the new scope' },
   { n: 5,  name: 'PumpRadar',         status: 'Live',     note: 'Phase 4 · real money, hard limits', next: 'Log every trade in Real Money Desk' },
