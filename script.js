@@ -1,7 +1,8 @@
 /* =========================================================
-   Basha HQ · Living Agents Map v3.0 — script.js
+   Basha HQ · Living Agents Map v3.1 — script.js
    Everything the map shows lives in ONE object: `world`.
    The house is painted on a <canvas> (a drawing surface) every frame.
+   A 'camera' decides which part of the house you see (whole house, or zoomed into a room).
    ========================================================= */
 (() => {
 'use strict';
@@ -650,6 +651,8 @@ function lamp(x, y) { oval(x, y + 1, 6, 2, 'rgba(0,0,0,.2)'); R(x - 1.5, y - 26,
 
 function drawScene() {
   g = sctx; seed = 11; WINDOWS.length = 0;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#74c25a'; g.fillRect(0, 0, sceneCanvas.width, sceneCanvas.height);
+  camTransform(g);
   // grass
   R(0, 0, MAP_W, MAP_H, '#74c25a');
   for (let i = 0; i < 1500; i++) {
@@ -849,7 +852,9 @@ function occupancy() {
 function drawFrame(now) {
   if (!ctx) return;
   g = ctx;
+  g.setTransform(1, 0, 0, 1, 0, 0);
   g.drawImage(sceneCanvas, 0, 0);
+  camTransform(g);
   // blinking lights on the workshop server rack
   const rk = ROOMS.workshop; if (Math.floor(now / 600) % 2) for (let j = 0; j < 6; j++) R(rk.x + 159, rk.y + 46.5 + j * 8, 2, 2, j % 2 ? '#ff9f1c' : '#9fffc8');
   const dark = darkness(world.clock.sim);
@@ -886,8 +891,18 @@ function buildLabels() {
   $('rooms').innerHTML = Object.keys(ROOMS).filter(id => id !== 'hall').map(id => {
     const r = ROOMS[id], o = owner[id];
     const lx = r.outdoor ? 790 : r.x + 6, ly = r.outdoor ? 228 : r.y + 4;
-    return `<div class="room-label${r.outdoor ? ' outdoor' : ''}" style="left:${lx / 10}%;top:${ly / 7}%">${o ? `<i style="--c:${o.color}"></i>` : ''}${esc(r.name)}</div>`;
+    const short = { office: 'Office', living: 'Living' }[id] || r.name;
+    return `<div class="room-label${r.outdoor ? ' outdoor' : ''}" data-x="${lx}" data-y="${ly}" data-w="${r.outdoor ? 200 : r.w}">${o ? `<i style="--c:${o.color}"></i>` : ''}<span class="ln">${esc(r.name)}</span><span class="ls">${esc(short)}</span></div>`;
   }).join('');
+}
+let labelBoxes = [];
+function positionLabels() {
+  labelBoxes = [];
+  document.querySelectorAll('#rooms .room-label').forEach(el => {
+    el.style.transform = `translate(${((+el.dataset.x - cam.x) * K).toFixed(1)}px, ${((+el.dataset.y - cam.y) * K).toFixed(1)}px)`;
+    el.style.maxWidth = Math.max(30, (+el.dataset.w - 10) * K).toFixed(0) + 'px';
+    labelBoxes.push({ left: (+el.dataset.x - cam.x) * K, top: (+el.dataset.y - cam.y) * K, w: el.offsetWidth, h: el.offsetHeight });
+  });
 }
 
 function buildAgents() {
@@ -897,11 +912,13 @@ function buildAgents() {
     el.className = 'agent';
     el.style.setProperty('--c', a.color);
     el.setAttribute('role', 'button'); el.setAttribute('aria-label', a.name);
-    el.innerHTML = `<div class="bubble"><span></span></div>`;
-    el.addEventListener('click', e => { e.stopPropagation(); openPanel(a.id); });
+    el.innerHTML = `<div class="bubble"><span></span></div><b class="tag">${a.short}</b>`;
+    el.addEventListener('click', e => { e.stopPropagation(); if (performance.now() < gesture.blockUntil) return;
+      if (K < COMPACT_K) { zoomRoom(roomAt(a.x, a.y)); return; }   // too small to aim at: zoom into its room first
+      openPanel(a.id); });
     layer.appendChild(el);
     a.el = el; a.bubbleEl = el.querySelector('.bubble'); a.bubbleText = el.querySelector('.bubble span');
-    a._cls = ''; a._thought = '';
+    a._cls = ''; a._thought = ''; a._bw = 0; a._bh = 0; a._lift = 0; a._dx = 0;
   });
 }
 
@@ -948,27 +965,77 @@ function buildProjects() {
 
 /* ---------- 17. RENDER (DOM parts) ---------- */
 function renderAgents() {
-  const sim = world.clock.sim;
+  const sim = world.clock.sim, compact = K < COMPACT_K, focus = world.ui.bubbles === 'focus';
+  const avH = 26 * K * 1.35;
   // agents in the same room thinking the same thing share ONE bubble (e.g. team lunch)
   const groups = {};
   world.agents.forEach(a => { if (!a.travel) { const k = a.room + '|' + a.thought; (groups[k] = groups[k] || []).push(a); } });
+  const boxes = [];
   world.agents.forEach(a => {
-    a.el.style.transform = `translate3d(${(a.x / MAP_W * mapW).toFixed(1)}px, ${(a.y / MAP_H * mapH).toFixed(1)}px, 0)`;
+    const sx = (a.x - cam.x) * K, sy = (a.y - cam.y) * K;
+    a.el.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0)`;
     a.el.style.zIndex = 10 + Math.round(a.y);
     const sleeping = a.slot && a.slot.opts.sleep && !a.travel;
     const reflecting = sim < a.reflectUntil;
     const grp = a.travel ? null : groups[a.room + '|' + a.thought];
     const dup = grp && grp.length > 1 && grp[0] !== a;
-    const cls = ['agent', sleeping ? 'sleep' : '', dup ? 'dup' : '', world.ui.selected === a.id ? 'selected' : '',
-                 a.x < 150 ? 'edge-l' : a.x > 850 ? 'edge-r' : ''].join(' ').trim();
-    if (cls !== a._cls) { a.el.className = cls; a._cls = cls; }
+    const selected = world.ui.selected === a.id;
     const t = (sleeping && !reflecting ? 'zz · ' : '') + a.thought + (grp && grp.length > 1 && !dup ? ` · ${grp.length} agents` : '');
     if (t !== a._thought) {
-      a._thought = t; a.bubbleText.textContent = t;
+      a._thought = t; a.bubbleText.textContent = t; a._bw = 0;
       a.bubbleEl.classList.toggle('reflect', reflecting);
       a.bubbleEl.classList.remove('pop'); void a.bubbleEl.offsetWidth; a.bubbleEl.classList.add('pop');
     }
+    // which label does this agent show? bubble (zoomed in) or a small name tag (whole-house view)
+    const onScreen = sx > 2 && sx < mapW - 2 && sy > 8 && sy < mapH + avH;
+    const showBubble = onScreen && !dup && (compact ? selected : (!focus || selected));
+    const showTag = onScreen && compact && !selected;
+    let edge = '';
+    if (showBubble) {
+      if (!a._bw) { a._bw = a.bubbleEl.offsetWidth; a._bh = a.bubbleEl.offsetHeight; }
+      if (sx - a._bw / 2 < 4) edge = 'edge-l'; else if (sx + a._bw / 2 > mapW - 4) edge = 'edge-r';
+      const left = edge === 'edge-l' ? sx - 13 * K - 4 : edge === 'edge-r' ? sx + 13 * K + 4 - a._bw : sx - a._bw / 2;
+      boxes.push({ a, sy, left, w: a._bw, h: a._bh, top: sy - avH - 5 - a._bh });
+    } else if (showTag) {
+      boxes.push({ a, sy, left: sx - 10, w: 20, h: 12, top: sy - avH - 2 - 12, tag: true });
+    }
+    const cls = ['agent', sleeping ? 'sleep' : '', selected ? 'selected' : '', showBubble ? 'bub' : '', showTag ? 'tagged' : '', edge].join(' ').replace(/\s+/g, ' ').trim();
+    a._baseCls = cls;
   });
+  // keep labels from piling on top of each other: lower agents keep their spot, the others find free space
+  boxes.sort((p, q) => q.sy - p.sy);
+  const placed = labelBoxes.slice();   // room names count as taken space
+  const hitAt = (b, left, top) => placed.find(p => left < p.left + p.w + 3 && left + b.w + 3 > p.left && top < p.top + p.h + 3 && top + b.h + 3 > p.top);
+  const inside = (b, left, top) => top >= 2 && top + b.h <= mapH - 2 && left >= -2 && left + b.w <= mapW + 2;
+  boxes.forEach(b => {
+    let best = null;
+    if (b.tag) {
+      // tags stay right next to their agent: above, one step left/right, or under the feet; only other tags block them
+      const tagHit = (left, top) => placed.find(p => p.tag && left < p.left + p.w + 2 && left + b.w + 2 > p.left && top < p.top + p.h + 2 && top + b.h + 2 > p.top);
+      const under = b.sy + 3;
+      for (const [dx, top, below] of [[0, b.top, false], [-(b.w + 2), b.top, false], [b.w + 2, b.top, false], [0, under, true]]) {
+        if (!tagHit(b.left + dx, top) && top >= 1) { best = { dx, top, below }; break; }
+      }
+      if (!best) best = { dx: 0, top: b.top, below: false };
+    } else {
+      const tries = [];
+      let top = b.top, hit, n = 0;                       // stack upwards
+      while ((hit = hitAt(b, b.left, top)) && n++ < 8) top = hit.top - b.h - 4;
+      if (!hitAt(b, b.left, top) && inside(b, b.left, top)) tries.push({ top, below: false, cost: b.top - top });
+      let low = b.sy + 6; n = 0;                          // or stack downwards, under the feet
+      while ((hit = hitAt(b, b.left, low)) && n++ < 8) low = hit.top + hit.h + 4;
+      if (!hitAt(b, b.left, low) && inside(b, b.left, low)) tries.push({ top: low, below: true, cost: low - (b.sy + 6) + 14 });
+      tries.sort((p, q) => p.cost - q.cost);
+      best = tries[0] || { top: Math.max(2, b.top), below: false };
+      best.dx = 0;
+    }
+    placed.push({ left: b.left + best.dx, w: b.w, top: best.top, h: b.h, tag: !!b.tag });
+    const lift = best.below ? Math.max(0, Math.round(best.top - (b.sy + (b.tag ? 3 : 6)))) : Math.max(0, Math.round(b.top - best.top));
+    if (lift !== b.a._lift) { b.a._lift = lift; b.a.el.style.setProperty('--lift', lift + 'px'); }
+    if (best.dx !== b.a._dx) { b.a._dx = best.dx; b.a.el.style.setProperty('--dx', best.dx + 'px'); }
+    b.a._baseCls += (best.below ? ' below' : '') + (lift > 2 ? ' lifted' : '');
+  });
+  world.agents.forEach(a => { if (a._baseCls !== a._cls) { a.el.className = a._baseCls; a._cls = a._baseCls; } });
 }
 
 function agentState(a) {
@@ -1085,9 +1152,151 @@ function renderLivePortfolio() {
   $('pfRules').textContent = 'Paper only · rules live in Notion (Portfolio Advisor)';
 }
 
+/* ---------- 17b. CAMERA ----------
+   The camera is the window onto the house, in map units. Whole house = x 0, w 1000.
+   Zoomed in = a smaller window, so everything inside it is drawn bigger and sharper. */
+const COMPACT_K = 0.55;          // below this size, bubbles turn into small name tags
+const MIN_CAM_W = 260;           // most zoomed-in view (map units across)
+const cam = { x: 0, y: 0, w: MAP_W, tx: 0, ty: 0, tw: MAP_W, follow: null, room: null };
+let K = 1, camDirty = true;
+const gesture = { moved: false, blockUntil: 0 };
+const camH = w => w * mapH / mapW;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const isPhone = () => mapW < 640;
+function camTransform(c) { c.setTransform(1, 0, 0, 1, -Math.round(cam.x * S), -Math.round(cam.y * S)); }
+function fitCam(o, wKey, xKey, yKey) {
+  o[wKey] = clamp(o[wKey], MIN_CAM_W, MAP_W);
+  const h = camH(o[wKey]);
+  o[xKey] = clamp(o[xKey], 0, MAP_W - o[wKey]); o[yKey] = clamp(o[yKey], 0, Math.max(0, MAP_H - h));
+}
+function roomView(id) {
+  const r = ROOMS[id], aspect = mapW / mapH, maxK = 1.5;
+  if (id === 'garden') return { cx: 880, cy: 330, w: Math.max(400, mapW / maxK) };
+  if (id === 'hall') return { cx: 400, cy: 312, w: 760 };
+  const w = Math.max(r.w + 50, (r.h + 70) * aspect, mapW / maxK);
+  return { cx: r.x + r.w / 2, cy: r.y + r.h / 2 - 10, w };
+}
+function zoomTo(cx, cy, w, room, instant) {
+  cam.tw = clamp(w, MIN_CAM_W, MAP_W);
+  cam.tx = cx - cam.tw / 2; cam.ty = cy - camH(cam.tw) / 2;
+  fitCam(cam, 'tw', 'tx', 'ty');
+  cam.room = room || null;
+  if (instant) { cam.x = cam.tx; cam.y = cam.ty; cam.w = cam.tw; camDirty = true; }
+  updateMapUI();
+}
+function zoomRoom(id) { const v = roomView(id); cam.follow = null; zoomTo(v.cx, v.cy, v.w, id); }
+function zoomAll() { cam.follow = null; zoomTo(MAP_W / 2, MAP_H / 2, MAP_W, null); }
+function zoomBy(f) {
+  cam.follow = null;
+  const cx = cam.tx + cam.tw / 2, cy = cam.ty + camH(cam.tw) / 2;
+  zoomTo(cx, cy, cam.tw * f, null);
+}
+function followAgent(a) {
+  const v = roomView(a.room === 'hall' ? (a.slot ? a.slot.room : 'living') : a.room);
+  cam.follow = a.id; zoomTo(a.x, a.y - 30, v.w, a.room);
+}
+function stepCamera(dt) {
+  if (cam.follow) {
+    const a = byId(cam.follow);
+    if (a) { cam.tx = a.x - cam.tw / 2; cam.ty = a.y - 30 - camH(cam.tw) / 2; fitCam(cam, 'tw', 'tx', 'ty'); cam.room = roomAt(a.x, a.y); }
+  }
+  const f = 1 - Math.exp(-dt * 8);
+  const dx = cam.tx - cam.x, dy = cam.ty - cam.y, dw = cam.tw - cam.w;
+  if (Math.abs(dx) + Math.abs(dy) + Math.abs(dw) > 0.08) {
+    cam.x += dx * f; cam.y += dy * f; cam.w += dw * f; camDirty = true;
+  } else if (dx || dy || dw) { cam.x = cam.tx; cam.y = cam.ty; cam.w = cam.tw; camDirty = true; }
+  if (camDirty) applyCam();
+}
+function applyCam() {
+  camDirty = false;
+  if (!sceneCanvas || !mapW) return;
+  K = mapW / cam.w; S = sceneCanvas.width / cam.w;
+  const map = $('map');
+  map.style.setProperty('--av', (26 * K).toFixed(1) + 'px');
+  map.style.setProperty('--lf', clamp(13 * K, K < COMPACT_K ? 7.5 : 9, 13).toFixed(1) + 'px');
+  map.classList.toggle('compact', K < COMPACT_K);
+  map.classList.toggle('zoomed', cam.tw < MAP_W - 1);
+  world.agents.forEach(a => { a._bw = 0; });
+  drawScene(); positionLabels();
+}
+function updateMapUI() {
+  const zoomed = cam.tw < MAP_W - 1;
+  $('mapUi').classList.toggle('zoomed', zoomed);
+  $('map').classList.toggle('zoomed', zoomed);
+  document.querySelectorAll('#roomChips .rchip').forEach(b => b.classList.toggle('active', zoomed ? b.dataset.room === cam.room : b.dataset.room === 'all'));
+  const act = document.querySelector('#roomChips .rchip.active');
+  if (act && act.scrollIntoView && isPhone()) { const s = act.parentElement; s.scrollTo({ left: act.offsetLeft - s.clientWidth / 2 + act.clientWidth / 2, behavior: 'smooth' }); }
+}
+function buildRoomChips() {
+  const ids = Object.keys(ROOMS).filter(id => id !== 'hall');
+  $('roomChips').innerHTML = `<button class="rchip active" data-room="all">Whole house</button>` +
+    ids.map(id => `<button class="rchip" data-room="${id}">${esc(ROOMS[id].name)}<b id="rc-n-${id}"></b></button>`).join('');
+  $('roomChips').addEventListener('click', e => {
+    const b = e.target.closest('.rchip'); if (!b) return;
+    if (b.dataset.room === 'all') zoomAll(); else zoomRoom(b.dataset.room);
+  });
+}
+function renderRoomChips() {
+  const occ = occupancy();
+  Object.keys(ROOMS).forEach(id => { const el = $('rc-n-' + id); if (el) { const n = occ[id] ? occ[id].n : 0; el.textContent = n || ''; } });
+}
+// Touch + mouse: tap a room to zoom in, drag to look around, pinch to zoom
+function bindMap() {
+  const map = $('map'), pts = new Map();
+  let drag = null, pinch = null;
+  const toWorld = (cx, cy) => { const r = map.getBoundingClientRect(); return { x: cam.x + (cx - r.left) / K, y: cam.y + (cy - r.top) / K, px: cx - r.left, py: cy - r.top }; };
+  map.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    gesture.moved = false;
+    if (pts.size === 1) drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, onAgent: !!e.target.closest('.agent') };
+    if (pts.size === 2) {
+      const [p, q] = [...pts.values()];
+      pinch = { d: Math.hypot(p.x - q.x, p.y - q.y) || 1, w: cam.w, mid: toWorld((p.x + q.x) / 2, (p.y + q.y) / 2) };
+      drag = null;
+    }
+  });
+  window.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pts.size >= 2) {
+      const [p, q] = [...pts.values()], d = Math.hypot(p.x - q.x, p.y - q.y) || 1;
+      const w = clamp(pinch.w * pinch.d / d, MIN_CAM_W, MAP_W), m = pinch.mid;
+      cam.follow = null; cam.room = null;
+      cam.w = cam.tw = w; cam.x = cam.tx = m.x - m.px * w / mapW; cam.y = cam.ty = m.y - m.py * w / mapW;
+      fitCam(cam, 'w', 'x', 'y'); cam.tx = cam.x; cam.ty = cam.y; cam.tw = cam.w;
+      gesture.moved = true; camDirty = true; updateMapUI();
+      e.preventDefault();
+    } else if (drag && cam.w < MAP_W - 1) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!gesture.moved && Math.abs(dx) + Math.abs(dy) < 7) return;
+      gesture.moved = true; cam.follow = null; cam.room = null;
+      cam.x = cam.tx = drag.cx - dx / K; cam.y = cam.ty = drag.cy - dy / K;
+      fitCam(cam, 'w', 'x', 'y'); cam.tx = cam.x; cam.ty = cam.y;
+      camDirty = true; updateMapUI();
+      e.preventDefault();
+    }
+  }, { passive: false });
+  const end = e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    if (pts.size < 2) pinch = null;
+    if (e.type === 'pointerup' && drag && !gesture.moved && !drag.onAgent && pts.size === 0) {
+      const w = toWorld(e.clientX, e.clientY), id = roomAt(w.x, w.y);
+      if (cam.w >= MAP_W - 1 || id !== cam.room) zoomRoom(id);
+    }
+    if (pts.size === 0) { if (gesture.moved) gesture.blockUntil = performance.now() + 450; drag = null; gesture.moved = false; }
+  };
+  window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+  $('zoomIn').addEventListener('click', () => zoomBy(0.7));
+  $('zoomOut').addEventListener('click', () => zoomBy(1.45));
+  $('zoomAll').addEventListener('click', zoomAll);
+}
+
 /* ---------- 18. AGENT PANEL ---------- */
 function openPanel(id) {
   world.ui.selected = id;
+  const ag = byId(id); if (ag && isPhone()) followAgent(ag);
   $('panel').classList.add('open'); $('panel').setAttribute('aria-hidden', 'false'); $('scrim').classList.add('open');
   renderPanel(); $('panelBody').scrollTop = 0;
 }
@@ -1190,13 +1399,14 @@ function frame(now) {
   else if (!c.paused) c.sim += dt * c.speed * 60000; // 1× = 1 simulated minute per real second
   simStep();
   moveAgents(dt);
+  stepCamera(dt);
   drawFrame(now);
   renderAgents();
   flushFeed();
   slowTimer += dt; saveTimer += dt;
   if (slowTimer > 0.25) {
     slowTimer = 0;
-    renderClock(); renderRoster(); renderPortfolio();
+    renderClock(); renderRoster(); renderPortfolio(); renderRoomChips();
     if (world.ui.selected) renderPanel();
   }
   if (saveTimer > 15) { saveTimer = 0; save(); }
@@ -1205,16 +1415,17 @@ function frame(now) {
 
 function resize() {
   const map = $('map'), canvas = $('scene');
-  mapW = map.clientWidth; mapH = map.clientHeight;
-  if (!mapW || !mapH) return;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = map.clientWidth, h = map.clientHeight;
+  if (!w || !h) return;
+  mapW = w; mapH = h;
+  // the canvas only covers what you see, so it can be sharp on a phone (up to 3× pixels)
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
   canvas.width = Math.round(mapW * dpr); canvas.height = Math.round(mapH * dpr);
   sceneCanvas = sceneCanvas || document.createElement('canvas');
   sceneCanvas.width = canvas.width; sceneCanvas.height = canvas.height;
   ctx = canvas.getContext('2d'); sctx = sceneCanvas.getContext('2d');
-  S = canvas.width / MAP_W;
-  drawScene();
-  map.style.setProperty('--av', (26 * mapW / MAP_W).toFixed(1) + 'px');
+  fitCam(cam, 'w', 'x', 'y'); fitCam(cam, 'tw', 'tx', 'ty');
+  applyCam(); updateMapUI();
 }
 
 /* ---------- 21. START ---------- */
@@ -1243,14 +1454,14 @@ function init() {
   });
   if (!restored) world.agents.forEach(a => pushFeed({ t: c.sim, agent: a.id, text: `Online in the ${ROOMS[a.room].name}: ${a.slot.activity}`, type: 'observe', imp: 2 }));
 
-  buildLabels(); buildAgents(); buildRoster(); buildFilters(); buildProjects(); bindControls();
+  buildLabels(); buildAgents(); buildRoster(); buildFilters(); buildProjects(); buildRoomChips(); bindControls(); bindMap();
   setBubbles(world.ui.bubbles);
   renderFeedAll();
 
   resize();
   if ('ResizeObserver' in window) new ResizeObserver(resize).observe($('map')); else window.addEventListener('resize', resize);
 
-  renderClock(); renderRoster(); renderPortfolio();
+  renderClock(); renderRoster(); renderPortfolio(); renderRoomChips();
   loadLive(); setInterval(loadLive, LIVE_REFRESH_MIN * 60000);
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
 }
