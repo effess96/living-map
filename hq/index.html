@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0f1d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Basha HQ">
+  <link rel="apple-touch-icon" href="../icon.png">
+  <link rel="icon" type="image/png" href="../icon.png">
+  <title>Basha HQ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brand">
+      <div class="mark">B</div>
+      <div>
+        <div class="title">Basha HQ</div>
+        <div class="sub" id="clock">Amman</div>
+      </div>
+    </div>
+    <div class="sources" id="sources" aria-label="Data sources"></div>
+  </header>
+
+  <!-- TODAY -->
+  <main class="tab active" id="tab-today" data-tab="today">
+   <div class="col col-a">
+    <section class="block o1">
+      <div class="block-head"><h2>Needs you</h2><span class="count" id="needCount"></span></div>
+      <div id="needs"></div>
+    </section>
+
+   </div>
+   <div class="col col-b">
+    <section class="block o2">
+      <div class="block-head"><h2>Money</h2><span class="hint">real first, then paper</span></div>
+      <div class="money" id="money"></div>
+      <div id="trades"></div>
+    </section>
+
+    <section class="block o3">
+      <div class="block-head"><h2>Coming up</h2><span class="hint">Amman time</span></div>
+      <ol class="agenda" id="agenda"></ol>
+    </section>
+
+    <section class="block o4">
+      <div class="block-head"><h2>What the team did</h2><span class="hint" id="briefDate"></span></div>
+      <ul class="done" id="done"></ul>
+    </section>
+   </div>
+  </main>
+
+  <!-- PIPELINE -->
+  <main class="tab" id="tab-pipeline" data-tab="pipeline">
+    <section class="block">
+      <div class="block-head"><h2>Pipeline</h2><span class="hint">everything moving toward income</span></div>
+      <div id="pipeline"></div>
+    </section>
+    <section class="block">
+      <div class="block-head"><h2>DropRadar finds</h2><span class="hint" id="dropMeta"></span></div>
+      <div id="drops"></div>
+    </section>
+  </main>
+
+  <!-- AGENTS -->
+  <main class="tab" id="tab-agents" data-tab="agents">
+    <section class="block">
+      <div class="block-head"><h2>Scheduled runs</h2><span class="hint">from the activity log</span></div>
+      <div class="health" id="health"></div>
+    </section>
+    <section class="block">
+      <div class="block-head"><h2>Team</h2><span class="hint">last real action · last thing learned</span></div>
+      <div class="agents" id="agents"></div>
+    </section>
+    <section class="block">
+      <div class="block-head"><h2>Activity log</h2><span class="hint">newest first</span></div>
+      <div class="filters" id="logFilters"></div>
+      <ol class="log" id="log"></ol>
+    </section>
+  </main>
+
+  <!-- HOUSE -->
+  <main class="tab" id="tab-house" data-tab="house">
+    <section class="block house">
+      <h2>The House</h2>
+      <p>The pixel house with walking agents lives here as its own view. Today the agents' movement is animation; their thoughts and memories come from the real activity log.</p>
+      <p>When the team runs many jobs a day, the house becomes a real-time picture of who is working on what.</p>
+      <a class="btn gold" href="../" target="_blank" rel="noopener">Open the Living Map</a>
+    </section>
+  </main>
+
+  <footer class="foot" id="foot"></footer>
+</div>
+
+<nav class="tabbar" aria-label="Sections">
+  <button data-go="today" class="active"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z"/></svg>Today</button>
+  <button data-go="pipeline"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg>Pipeline</button>
+  <button data-go="agents"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3 3 0 0 1 0 6M21 20c0-2.6-1.6-4.8-4-5.6"/></svg>Agents</button>
+  <button data-go="house"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 9.5V20h14V9.5M10 20v-6h4v6"/></svg>House</button>
+</nav>
+
+<script src="app.js"></script>
+</body>
+</html>

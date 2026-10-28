@@ -1,5 +1,4 @@
-# Living Agents Map
+# Basha HQ
 
-Basha HQ's House Agents, living in a 16-bit house. Live: https://effess96.github.io/living-map/
-
-Files: `index.html`, `style.css`, `script.js`. Live data comes from the Cloudflare bridge (set `WORLD_URL` in script.js).
+- **HQ v4 (real data only):** https://effess96.github.io/living-map/hq/ — files in `hq/` (`index.html`, `style.css`, `app.js`). Live data: Notion via the Cloudflare bridge (`hq/bridge-worker-v2.js`) + the PumpRadar trader bot on Railway.
+- **The House (Living Agents Map):** https://effess96.github.io/living-map/ — the pixel house, now the "House" tab of HQ.
