@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-title" content="Basha HQ">
   <link rel="apple-touch-icon" href="icon.png">
   <link rel="icon" type="image/png" href="icon.png">
-  <title>Basha HQ · Living Agents Map v3.2</title>
+  <title>Basha HQ · Living Agents Map v3.3</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -22,7 +22,7 @@
       <div class="brand-mark">B</div>
       <div>
         <div class="brand-title">Basha HQ</div>
-        <div class="brand-sub">Living Agents Map · v3.2</div>
+        <div class="brand-sub">Living Agents Map · v3.3</div>
         <div class="live-badge" id="liveBadge">checking live data…</div>
       </div>
     </div>
@@ -90,21 +90,26 @@
       <div class="card glass portfolio" id="portfolio">
         <div class="card-head">
           <div>
-            <h2>Paper portfolio</h2>
-            <p class="muted">Managed by Portfolio Advisor</p>
+            <h2>Real money · Phase 4</h2>
+            <p class="muted">PumpRadar trading wallet · Basha trades, agents log</p>
           </div>
-          <span class="badge-paper">PAPER · SIM</span>
+          <span class="badge-real" id="rmBadge">REAL</span>
         </div>
-        <div class="pf-value mono" id="pfValue">$10,000.00</div>
-        <div class="pf-pnl mono" id="pfPnl">+$0.00 (0.00%)</div>
-        <svg class="spark" id="pfSpark" viewBox="0 0 300 60" preserveAspectRatio="none"></svg>
-        <div class="alloc" id="pfAlloc"></div>
-        <div class="alloc-legend" id="pfLegend"></div>
+        <div class="pf-value mono" id="pfValue">—</div>
+        <div class="pf-pnl mono" id="pfPnl">Add your wallet address below</div>
+        <div class="rm-stop">
+          <div class="rm-bar"><i id="rmBar"></i><b class="rm-tick" title="Hard stop $10"></b></div>
+          <div class="rm-scale mono"><span>$10 hard stop</span><span>$20 start</span><span>$30</span></div>
+        </div>
         <div class="pf-positions" id="pfPositions"></div>
         <div class="pf-last" id="pfLast"></div>
+        <div class="rm-wallet" id="rmWallet">
+          <input id="rmAddr" class="mono" placeholder="Paste your Phantom public address" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button class="btn" id="rmSave">Save</button>
+        </div>
         <div class="pf-rules">
           <svg viewBox="0 0 24 24" width="13" height="13"><path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z" fill="currentColor"/></svg>
-          <span id="pfRules">Rules locked</span>
+          <span id="pfRules">$5 max/trade · 50% off at 2× · stop −35% · hard stop $10 · no entries 01–07</span>
         </div>
       </div>
 

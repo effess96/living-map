@@ -1,5 +1,5 @@
 /* =========================================================
-   Basha HQ · Living Agents Map v3.2 — script.js
+   Basha HQ · Living Agents Map v3.3 — script.js
    Everything the map shows lives in ONE object: `world`.
    The house is painted on a <canvas> (a drawing surface) every frame.
    A 'camera' decides which part of the house you see (whole house, or zoomed into a room).
@@ -243,7 +243,7 @@ const PROJECTS = [
   { n: 2,  name: 'Living Agents Map', status: 'Live',     note: 'GitHub Pages · v3.2 · mobile zoom', next: 'Connect the live bridge' },
   { n: 3,  name: 'YieldHour',         status: 'Testing',  note: '30-day test', next: 'Log weekly results', test: ['2026-10-19', '2026-11-18'] },
   { n: 4,  name: 'DropRadar',         status: 'Building', note: 'Expanding: Jordan free stuff + drops', next: 'Write the new scope' },
-  { n: 5,  name: 'PumpRadar',         status: 'Live',     note: 'v4 + paper-only lock', next: 'Build the paper track record' },
+  { n: 5,  name: 'PumpRadar',         status: 'Live',     note: 'Phase 4 · real money, hard limits', next: 'Log every trade in Real Money Desk' },
   { n: 6,  name: 'Agentic AI Lab',    status: 'Ongoing',  note: 'Learning path', next: 'Next lesson' },
   { n: 7,  name: 'PumpRadar Bot',     status: 'Live',     note: 'Agent #7 · paper only', next: 'First weekly review Sun 1 Nov' },
   { n: 8,  name: 'Art Studio',        status: 'Building', note: 'Agent #8 · 18 icons in 3 packs', next: 'Pack A to 24 icons' },
@@ -472,10 +472,7 @@ function marketStep() {
   if (curMin - pf.lastHistMin >= 15) { pf.history.push(equity()); if (pf.history.length > 192) pf.history.shift(); pf.lastHistMin = curMin; }
   riskCheck();
   const pa = byId('pa');
-  if (pa && pa.slot && pa.slot.opts.trade && !pa.travel && world.clock.sim >= pf.nextTradeAt) {
-    pf.nextTradeAt = world.clock.sim + RULES.tradeEveryMin * 60000;
-    decideTrade(pa, curMin);
-  }
+  // v3.3: no simulated trades. Real Phase 4 trades come from Basha's wallet and the Notion Real Money Desk.
 }
 function trade(side, sym, qty, reason, tagType = 'trade') {
   const pf = world.portfolio, as = pf.assets.find(x => x.sym === sym), value = qty * as.price;
@@ -533,7 +530,7 @@ async function loadLive() {
     const res = await fetch(WORLD_URL, { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const d = await res.json();
-    live.on = true; live.updated = d.updated || null; live.portfolio = d.portfolio || null; live.brief = d.brief || [];
+    live.on = true; live.updated = d.updated || null; live.portfolio = d.portfolio || null; live.brief = d.brief || []; live.realTrades = d.realTrades || null;
     const seen = new Set(world.feed.map(m => m.agent + '|' + m.text));
     Object.entries(d.agents || {}).forEach(([id, info]) => {
       const a = byId(id); if (!a || !info) return;
@@ -1099,62 +1096,73 @@ function flushFeed() {
   while (list.children.length > 60) list.lastElementChild.remove();
 }
 
-function renderPortfolio() {
-  if (live.on && live.portfolio) return renderLivePortfolio();
-  const pf = world.portfolio, st = portfolioStats();
-  $('pfValue').textContent = fmtUsd(st.eq);
-  const pnl = $('pfPnl');
-  pnl.textContent = `${fmtSigned(st.pnl)} (${fmtPct(st.pnlPct)}) all-time`;
-  pnl.className = 'pf-pnl mono ' + (st.pnl > 0.005 ? 'up' : st.pnl < -0.005 ? 'down' : 'flat');
-
-  const hist = pf.history.concat([st.eq]);
-  const lo = Math.min(RULES.startCash, ...hist), hi = Math.max(RULES.startCash, ...hist), span = Math.max(hi - lo, 1);
-  const pts = hist.map((v, i) => [hist.length === 1 ? 300 : i / (hist.length - 1) * 300, 56 - (v - lo) / span * 50]);
-  const line = pts.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ');
-  const base = 56 - (RULES.startCash - lo) / span * 50, col = st.pnl >= 0 ? '#3DDC84' : '#FF6B6B';
-  $('pfSpark').innerHTML = `<defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".28"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
-    <line x1="0" x2="300" y1="${base}" y2="${base}" stroke="rgba(255,255,255,.18)" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>
-    <polygon points="0,60 ${line} 300,60" fill="url(#sg)"/>
-    <polyline points="${line}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>`;
-
-  const parts = [{ sym: 'Cash', v: pf.cash, color: 'rgba(255,255,255,.22)' }]
-    .concat(pf.assets.filter(as => pf.positions[as.sym]).map(as => ({ sym: as.sym, v: pf.positions[as.sym].qty * as.price, color: as.color })));
-  $('pfAlloc').innerHTML = parts.map(q => `<span style="width:${q.v / st.eq * 100}%;background:${q.color}"></span>`).join('');
-  $('pfLegend').innerHTML = parts.map(q => `<span><b style="background:${q.color}"></b>${q.sym} ${Math.round(q.v / st.eq * 100)}%</span>`).join('');
-
-  const rows = pf.assets.filter(as => pf.positions[as.sym]).map(as => {
-    const pos = pf.positions[as.sym], gain = as.price / pos.avg - 1;
-    return `<div class="pos mono"><span class="sym">${as.sym}</span><span class="q">${fmtQty(pos.qty)}</span><span>${fmtUsd(pos.qty * as.price)}</span><span class="${gain >= 0 ? 'up' : 'down'}">${fmtPct(gain)}</span></div>`;
-  }).join('');
-  const pa = byId('pa');
-  let waiting = 'All cash — waiting for a setup that passes the locked rules.';
-  if (!(pa.slot && pa.slot.opts.trade)) {
-    const h = simHour(world.clock.sim), next = pa.schedule.find(s => s[4] && s[4].trade && s[0] > h) || pa.schedule.find(s => s[4] && s[4].trade);
-    waiting = `All cash. Next trading window: ${pad(next[0])}:00 Amman.`;
-  }
-  $('pfPositions').innerHTML = rows || `<div class="pf-empty">${waiting}</div>`;
-  const t = pf.trades[0];
-  $('pfLast').innerHTML = t
-    ? `Last trade <b>${t.side} ${t.sym}</b> · ${fmtUsd(t.value)} @ ${fmtUsd(t.price)} · <span class="mono">${hhmm(t.t)}</span><br>${esc(t.reason)}`
-    : 'No paper trades yet.';
-  $('pfRules').textContent = `Rules locked: max ${RULES.maxPosition * 100}%/position · cash ≥ ${RULES.minCash * 100}% · stop ${RULES.stopLoss * 100}% · take-profit +${RULES.takeProfit * 100}%`;
+/* ---------- 17a. REAL MONEY (Phase 4) ----------
+   Reads the PUBLIC balance of Basha's trading wallet straight from Solana (read-only).
+   The address is stored only in this browser, never in the code. Trades come from the
+   Notion "Real Money Desk" through the live bridge when it is connected. */
+const RM = { start: 20, stop: 10, key: 'bashaHQ.rmWallet', rpc: 'https://api.mainnet-beta.solana.com',
+  addr: '', sol: null, tokens: 0, solUsd: null, at: 0, err: '' };
+try { RM.addr = localStorage.getItem(RM.key) || ''; } catch (e) {}
+const isSolAddr = s => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
+async function rpc(method, params) {
+  const r = await fetch(RM.rpc, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+  const d = await r.json(); if (d.error) throw new Error(d.error.message); return d.result;
 }
-
-function renderLivePortfolio() {
-  const p = live.portfolio, v = +p.value || 0, pnl = +p.pnl || (v - RULES.startCash), pct = pnl / RULES.startCash;
-  $('pfValue').textContent = fmtUsd(v);
-  const el = $('pfPnl'); el.textContent = `${fmtSigned(pnl)} (${fmtPct(pct)}) · real paper portfolio from Notion`;
-  el.className = 'pf-pnl mono ' + (pnl > 0.005 ? 'up' : pnl < -0.005 ? 'down' : 'flat');
-  $('pfSpark').innerHTML = '';
-  const pos = p.positions || [], cash = +p.cash || 0;
-  const cols = ['#F2A541', '#8B93FF', '#36D1C4', '#D8C27A', '#6FA8FF', '#F472B6'];
-  const parts = [{ sym: 'Cash', v: cash, color: 'rgba(255,255,255,.22)' }].concat(pos.map((q, i) => ({ sym: q.sym, v: +q.value || 0, color: cols[i % cols.length] })));
-  const tot = parts.reduce((s, q) => s + q.v, 0) || 1;
-  $('pfAlloc').innerHTML = parts.map(q => `<span style="width:${q.v / tot * 100}%;background:${q.color}"></span>`).join('');
-  $('pfLegend').innerHTML = parts.map(q => `<span><b style="background:${q.color}"></b>${esc(q.sym)} ${Math.round(q.v / tot * 100)}%</span>`).join('');
-  $('pfPositions').innerHTML = pos.map(q => `<div class="pos mono"><span class="sym">${esc(q.sym)}</span><span class="q"></span><span>${fmtUsd(+q.value || 0)}</span><span class="${(+q.pnl_pct || 0) >= 0 ? 'up' : 'down'}">${fmtPct((+q.pnl_pct || 0) / 100)}</span></div>`).join('') || '<div class="pf-empty">No open positions.</div>';
-  $('pfLast').innerHTML = p.last_trade ? `Last trade: <b>${esc(p.last_trade)}</b>` : 'No trades logged yet.';
-  $('pfRules').textContent = 'Paper only · rules live in Notion (Portfolio Advisor)';
+async function loadRealMoney() {
+  if (!RM.addr) return renderPortfolio();
+  try {
+    const [bal, toks, px] = await Promise.all([
+      rpc('getBalance', [RM.addr]),
+      rpc('getTokenAccountsByOwner', [RM.addr, { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' }, { encoding: 'jsonParsed' }]).catch(() => null),
+      fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd').then(r => r.json()).catch(() => null)
+    ]);
+    RM.sol = (bal && bal.value != null ? bal.value : bal) / 1e9;
+    RM.tokens = toks && toks.value ? toks.value.filter(a => +((a.account.data.parsed.info.tokenAmount || {}).uiAmount || 0) > 0).length : 0;
+    if (px && px.solana) RM.solUsd = px.solana.usd;
+    RM.at = Date.now(); RM.err = '';
+  } catch (e) { RM.err = 'Could not reach Solana right now — retrying'; }
+  renderPortfolio();
+}
+function renderPortfolio() {
+  const w = $('rmWallet'); if (!w) return;
+  w.classList.toggle('set', !!RM.addr);
+  const val = RM.sol != null && RM.solUsd ? RM.sol * RM.solUsd : null;
+  const trades = (live.on && live.realTrades) || [];
+  const realized = trades.reduce((s, t) => s + (+t.pnl || 0), 0);
+  if (!RM.addr) {
+    $('pfValue').textContent = '—';
+    $('pfPnl').textContent = 'Paste your trading wallet address (public only) to see real money here.';
+    $('pfPnl').className = 'pf-pnl mono flat';
+  } else if (val == null) {
+    $('pfValue').textContent = RM.sol != null ? fmtQty(RM.sol) + ' SOL' : '…';
+    $('pfPnl').textContent = RM.err || 'Reading your wallet…'; $('pfPnl').className = 'pf-pnl mono flat';
+  } else {
+    const pnl = val - RM.start;
+    $('pfValue').textContent = fmtUsd(val);
+    const el = $('pfPnl');
+    el.textContent = `${fmtSigned(pnl)} (${fmtPct(pnl / RM.start)}) vs $${RM.start} start · ${fmtQty(RM.sol)} SOL${RM.tokens ? ` + ${RM.tokens} token${RM.tokens > 1 ? 's' : ''} held` : ''}`;
+    el.className = 'pf-pnl mono ' + (pnl > 0.005 ? 'up' : pnl < -0.005 ? 'down' : 'flat');
+  }
+  const v = val == null ? RM.start : val, stopped = val != null && val <= RM.stop;
+  $('rmBar').style.width = Math.max(0, Math.min(100, (v - RM.stop) / (2 * (RM.start - RM.stop)) * 100)) + '%';
+  $('rmBadge').textContent = stopped ? 'STOPPED' : 'REAL'; $('rmBadge').classList.toggle('stop', stopped);
+  const open = trades.filter(t => t.status === 'Open'), closed = trades.filter(t => t.status !== 'Open');
+  const rows = open.concat(closed.slice(0, 4)).map(t => `<div class="pos mono"><span class="sym">${esc(String(t.token || '?').slice(0, 7))}</span><span class="q">${t.status === 'Open' ? 'open' : esc(t.date || '')}</span><span>${fmtUsd(+t.entry || 0)}</span><span class="${(+t.pnl || 0) >= 0 ? 'up' : 'down'}">${t.status === 'Open' ? '—' : fmtSigned(+t.pnl || 0)}</span></div>`).join('');
+  $('pfPositions').innerHTML = rows || `<div class="pf-empty">${live.on ? 'No real trades logged yet. Log each one in Notion → Real Money Desk.' : 'Real trades show here once the live bridge is connected (they live in Notion → Real Money Desk).'}</div>`;
+  $('pfLast').innerHTML = (stopped ? '<b class="down">Hard stop reached: no new trades until review.</b><br>' : '')
+    + (trades.length ? `Logged: ${trades.length} trade${trades.length > 1 ? 's' : ''} · realized ${fmtSigned(realized)}` : '')
+    + (RM.addr ? `${trades.length ? ' · ' : ''}<button class="rm-change" id="rmChange">change wallet</button>` : '')
+    + (RM.at ? ` <span class="mono">· ${new Date(RM.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>` : '');
+  const ch = $('rmChange'); if (ch) ch.onclick = () => { RM.addr = ''; $('rmAddr').value = ''; renderPortfolio(); };
+}
+function bindRealMoney() {
+  $('rmSave').addEventListener('click', () => {
+    const a = $('rmAddr').value.trim();
+    if (!isSolAddr(a)) { $('rmAddr').value = ''; $('rmAddr').placeholder = 'That is not a Solana address — try again'; return; }
+    RM.addr = a; try { localStorage.setItem(RM.key, a); } catch (e) {}
+    RM.sol = null; loadRealMoney();
+  });
+  loadRealMoney(); setInterval(loadRealMoney, 60000);
 }
 
 /* ---------- 17b. CAMERA ----------
@@ -1459,7 +1467,7 @@ function init() {
   });
   if (!restored) world.agents.forEach(a => pushFeed({ t: c.sim, agent: a.id, text: `Online in the ${ROOMS[a.room].name}: ${a.slot.activity}`, type: 'observe', imp: 2 }));
 
-  buildLabels(); buildAgents(); buildRoster(); buildFilters(); buildProjects(); buildRoomChips(); bindControls(); bindMap();
+  buildLabels(); buildAgents(); buildRoster(); buildFilters(); buildProjects(); buildRoomChips(); bindControls(); bindMap(); bindRealMoney();
   setBubbles(world.ui.bubbles);
   renderFeedAll();
 
