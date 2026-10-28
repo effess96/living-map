@@ -1100,10 +1100,10 @@ function flushFeed() {
    Reads the PUBLIC balance of Basha's trading wallet straight from Solana (read-only).
    The address is stored only in this browser, never in the code. Trades come from the
    Notion "Real Money Desk" through the live bridge when it is connected. */
-const RM = { start: 20, stop: 10, key: 'bashaHQ.rmWallet', rpcs: ['https://solana-rpc.publicnode.com', 'https://solana.drpc.org', 'https://api.mainnet-beta.solana.com'], rpcIdx: 0,
+const RM = { start: 20, stop: 10, key: 'bashaHQ.rmWallet2', rpcs: ['https://solana-rpc.publicnode.com', 'https://solana.drpc.org', 'https://api.mainnet-beta.solana.com'], rpcIdx: 0,
   addr: '', sol: null, tokens: 0, solUsd: null, at: 0, err: '' };
 // Basha's Phase 4 trading wallet (public address only; read-only balance). A browser-saved address overrides it.
-const RM_DEFAULT = '6YJYRTQRNVGMoTH6z8i7Avf5G3bsQwiAejWga1SpUWDL';
+const RM_DEFAULT = '76stXq8KvAwdkvvV6ssmZYjdSo3NQSsTN8Zhf9G4oG4A'; // trader bot (auto-trader)
 try { RM.addr = localStorage.getItem(RM.key) || RM_DEFAULT; } catch (e) { RM.addr = RM_DEFAULT; }
 const isSolAddr = s => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
 // Try each free public Solana server in turn and remember the one that answers.
@@ -1122,7 +1122,7 @@ async function rpc(method, params) {
 }
 async function loadRealMoney() {
   // Prefer the bridge: it reads the wallet from Cloudflare, so office networks can't block it.
-  if (live.on && live.wallet && live.wallet.sol != null) {
+  if (live.on && live.wallet && live.wallet.sol > 0) {
     RM.sol = live.wallet.sol; RM.tokens = live.wallet.tokens || 0; if (live.wallet.solUsd) RM.solUsd = live.wallet.solUsd;
     RM.at = Date.parse(live.wallet.at) || Date.now(); RM.err = ''; RM.viaBridge = true; return renderPortfolio();
   }
