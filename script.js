@@ -530,7 +530,7 @@ async function loadLive() {
     const res = await fetch(WORLD_URL, { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const d = await res.json();
-    live.on = true; live.updated = d.updated || null; live.portfolio = d.portfolio || null; live.brief = d.brief || []; live.realTrades = d.realTrades || null;
+    live.on = true; live.updated = d.updated || null; live.portfolio = d.portfolio || null; live.brief = d.brief || []; live.realTrades = d.realTrades || null; live.wallet = d.wallet || null; if (typeof loadRealMoney === 'function') setTimeout(loadRealMoney, 0);
     const seen = new Set(world.feed.map(m => m.agent + '|' + m.text));
     Object.entries(d.agents || {}).forEach(([id, info]) => {
       const a = byId(id); if (!a || !info) return;
@@ -1121,6 +1121,11 @@ async function rpc(method, params) {
   throw lastErr;
 }
 async function loadRealMoney() {
+  // Prefer the bridge: it reads the wallet from Cloudflare, so office networks can't block it.
+  if (live.on && live.wallet && live.wallet.sol != null) {
+    RM.sol = live.wallet.sol; RM.tokens = live.wallet.tokens || 0; if (live.wallet.solUsd) RM.solUsd = live.wallet.solUsd;
+    RM.at = Date.parse(live.wallet.at) || Date.now(); RM.err = ''; RM.viaBridge = true; return renderPortfolio();
+  }
   if (!RM.addr) return renderPortfolio();
   try {
     const [bal, toks, px] = await Promise.all([
@@ -1137,11 +1142,11 @@ async function loadRealMoney() {
 }
 function renderPortfolio() {
   const w = $('rmWallet'); if (!w) return;
-  w.classList.toggle('set', !!RM.addr);
+  w.classList.toggle('set', !!RM.addr || !!RM.viaBridge);
   const val = RM.sol != null && RM.solUsd ? RM.sol * RM.solUsd : null;
   const trades = (live.on && live.realTrades) || [];
   const realized = trades.reduce((s, t) => s + (+t.pnl || 0), 0);
-  if (!RM.addr) {
+  if (!RM.addr && !RM.viaBridge) {
     $('pfValue').textContent = '—';
     $('pfPnl').textContent = 'Paste your trading wallet address (public only) to see real money here.';
     $('pfPnl').className = 'pf-pnl mono flat';
